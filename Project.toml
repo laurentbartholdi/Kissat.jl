@@ -1,0 +1,16 @@
+name = "Kissat"
+uuid = "057e91dc-0d29-4c6c-955d-3db04e6fbc7f"
+authors = ["Laurent Bartholdi <laurent.bartholdi@gmail.com> and contributors"]
+version = "0.1.0"
+
+[deps]
+Kissat_jll = "971a2a11-349f-5eb6-a4bf-bc548fa92b3a"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

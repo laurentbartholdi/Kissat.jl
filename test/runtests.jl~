@@ -1,0 +1,6 @@
+using Kissat
+using Test
+
+@testset "Kissat.jl" begin
+    # Write your tests here.
+end
