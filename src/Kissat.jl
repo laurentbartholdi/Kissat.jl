@@ -270,15 +270,14 @@ function kissat(clauses; args...)
     p = init(; args...)
     append!(p, clauses)
     r = solve(p)
-    r == :unsatisfiable ? r : values(p)
+    r == :unsatisfiable ? r : values(p,1:maximum(maximum(abs.(c)) for c=clauses))
 end
 
 ################################################################
 struct TypedSolver{T} <: Solver
-    kissat::Ref{RawSolver}
+    kissat::RawSolver
     dict::Dict{T,Int}
     tcid::Vector{T}
-    rawclauses::Vector{Vector{Int}} # we have to store them since kissat cannot restart
 end
 
 """init(T::Type; ...)
@@ -286,22 +285,22 @@ end
 Same as init, except that the literals should now be of type T.
 
 push! and append! add one, respectively many clauses, each of which
-is an enumerable object consisting of objects of type T or Tuple{T,Bool}
+is an enumerable object consisting of objects of type T or Pair{T,Bool}
 to express negated variables."""
 function init(T::Type; args...)
-    p = TypedSolver{T}(init(; args...), Dict(), [], [])
+    p = TypedSolver{T}(init(; args...), Dict(), [])
     p
 end
 
 function Base.show(io::IO, p::TypedSolver{T}) where T
-    print(io, p.kissat[], "{$T}($(length(p.tcid)) literals, $(length(p.rawclauses)) clauses)")
+    print(io, p.kissat, "{$T}($(length(p.tcid)) literals)")
 end
 
 function Base.push!(p::TypedSolver{T}, clause) where T
-    rawclause = Int[]
     for c=clause
         v = true
-        if isa(c,Tuple{T,Bool})
+        if isa(c,Pair{T,Bool})
+            c.second && error("Clause format should be :T or :T=>false")
             (c,v) = c
         end
         if haskey(p.dict,c)
@@ -310,26 +309,31 @@ function Base.push!(p::TypedSolver{T}, clause) where T
             push!(p.tcid,c)
             p.dict[c] = ic = length(p.tcid)
         end
-        ic = v ? ic : -ic
-        add(p.kissat[], ic)
-        push!(rawclause, ic)
+        add(p.kissat, v ? ic : -ic)
     end
-    add(p.kissat[], 0)
-    push!(p.rawclauses,rawclause)
+    add(p.kissat, 0)
 end
 
-solve(p::TypedSolver) = solve(p.kissat[])
+Base.push!(p::TypedSolver{T}, c::T) where T = push!(p, [c])
+Base.push!(p::TypedSolver{T}, c::Pair{T,Bool}) where T = push!(p, [c])
+Base.push!(p::TypedSolver{T}, c::Pair{T,T}) where T = push!(p, [c.first=>false,c.second])
+Base.push!(p::TypedSolver{T}, c::Union{Pair{NTuple{N,T},Bool},Pair{Vector{T},Bool}}) where {T,N} = push!(p, [x=>c.second for x=c.first])
+Base.push!(p::TypedSolver{T}, c::Union{Pair{NTuple{N,T},T},Pair{Vector{T},T}}) where {T,N} = push!(p, [[x=>false for x=c.first]; c.second])
+
+solve(p::TypedSolver) = solve(p.kissat)
 
 function value(p::TypedSolver{T}, c::T) where T
-    value(p.kissat[], p.dict[c])
+    value(p.kissat, p.dict[c])
 end
 
+int2bool(v) = (v > 0 ? true : (v < 0 ? false : nothing))
+               
 """values(p::TypedSolver, range=keys(p.dict)
 
 Returns the values found by the solver, as a Dict{T,Int}.
 A value is >0 if and only if the variable is true in the solution."""
 function Base.values(p::TypedSolver, range=keys(p.dict))
-    Dict(c => value(p,c) for c=range)
+    Dict(c => int2bool(value(p,c)) for c=range)
 end
 
 """kissat(T::Type, clauses; ...)
@@ -347,20 +351,20 @@ end
 ################################################################
 # iterator
 
-function Base.iterate(p::TypedSolver{T}, state=nothing) where T
-    if solve(p)==:satisfiable
-        v = values(p.kissat[])
-        # prevent this clause from being returned again
-        push!(p.rawclauses,-v)
-        # refresh the solver, because Kissat does not allow iterative solving
-        p.kissat[] = init() ## should keep arguments of p.kissat!
-        append!(p.kissat[],p.rawclauses)
-        return (v, nothing)
+# this is useless, because kissat does not support iterative solving
+function Base.iterate(kissat::RawSolver, state=nothing)
+    if solve(kissat)==:satisfiable
+        v = get_model(it.p)
+        sol = [v[i] ? i : -i for i=1:length(v)]
+
+        # add inverse sol for next iter
+        add_clause(it.p, -sol)
+        return (sol, nothing)
     else
         return nothing
     end
 end
 
-Base.IteratorSize(it::Solver) = Base.SizeUnknown()
+IteratorSize(it::RawSolver) = Base.SizeUnknown()
 
 end

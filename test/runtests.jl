@@ -2,10 +2,11 @@ using Kissat
 using Test
 
 @testset "Kissat.jl" begin
-    p = init()
-    append!(p,[[1, -5, 4], [-1, 5, 3, 4], [-3, -4]])
-    @test solve(p) == :satisfiable
-    p = init(Int)
-    push!(p,[1,2])
-    @test Set(collect(p)) == Set([[1,2],[-1,2],[1,-2]])
+    cnf = [[1, -5, 4], [-1, 5, 3, 4], [-3, -4]];
+
+    @test kissat(cnf) == [1,0,3,-4,5]
+
+    cnf = [[:coffee,:tea],[:coffee=>false,:tea=>false],[:coffee=>false,:cream],:tea=>:milk]
+
+    @test kissat(Symbol,cnf) == Dict(:cream => 1, :milk => 1, :tea => 1, :coffee => 0)
 end
